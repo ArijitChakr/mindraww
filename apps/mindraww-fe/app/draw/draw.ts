@@ -48,7 +48,7 @@ interface Text {
 
 type Shape = Rect | Circle | FreePencil | Line | Diamond | Arrow | Text;
 
-type ShapeTypes =
+export type ShapeTypes =
   | "rect"
   | "circle"
   | "freePencil"
@@ -62,15 +62,18 @@ export class Draw {
   private startX: number = 0;
   private startY: number = 0;
   private isDrawing: boolean;
-  private selectedShape: ShapeTypes = "text";
+  private selectedShape: ShapeTypes;
   private shapes: Shape[] = [];
   private currFreePencil: FreePencil | null = null;
   private isWriting: boolean = false;
   private text: string = "";
+  private cursor: boolean = false;
+  private blinkInterval: number = 0;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, selectedShape: ShapeTypes) {
     this.ctx = canvas.getContext("2d")!;
     this.isDrawing = false;
+    this.selectedShape = selectedShape;
     this.clearCanvas();
     this.initDraw();
   }
@@ -112,7 +115,7 @@ export class Draw {
         this.drawArrow(shape.fromX, shape.fromY, shape.toX, shape.toY);
       }
       if (shape.type === "text") {
-        this.writeText(shape.text, shape.x, shape.y);
+        this.writeText(shape.text, shape.x, shape.y, false);
       }
     });
   };
@@ -144,11 +147,20 @@ export class Draw {
       this.text = "";
       this.clearCanvas();
     } else {
+      window.clearInterval(this.blinkInterval);
       this.isWriting = true;
       this.text = "";
       this.startX = e.clientX;
       this.startY = e.clientY;
       this.clearCanvas();
+      this.cursor = true;
+      this.blinkInterval = window.setInterval(() => {
+        if (this.isWriting) {
+          this.cursor = !this.cursor;
+          this.clearCanvas();
+          this.writeText(this.text, this.startX, this.startY);
+        }
+      }, 500);
     }
   };
 
@@ -343,8 +355,8 @@ export class Draw {
 
     const angle = Math.atan2(toY - fromY, toX - fromX);
 
-    const arrowAngle1 = angle - Math.PI / 6; // 30° angle for one side
-    const arrowAngle2 = angle + Math.PI / 6; // 30° angle for the other side
+    const arrowAngle1 = angle - Math.PI / 6;
+    const arrowAngle2 = angle + Math.PI / 6;
 
     const arrowPoint1X = toX - arrowHeadLength * Math.cos(arrowAngle1);
     const arrowPoint1Y = toY - arrowHeadLength * Math.sin(arrowAngle1);
@@ -360,7 +372,12 @@ export class Draw {
     this.ctx.stroke();
   };
 
-  writeText = (text: string, x: number, y: number) => {
+  writeText = (
+    text: string,
+    x: number,
+    y: number,
+    drawCursor: boolean = true
+  ) => {
     this.ctx.font = "20px Arial";
     this.ctx.fillStyle = "rgba(255, 255, 255)";
     const lineHeight = 20;
@@ -368,6 +385,16 @@ export class Draw {
     lines.forEach((line, index) => {
       this.ctx.fillText(line, x, y + index * lineHeight);
     });
+
+    if (this.isWriting && this.cursor && drawCursor) {
+      const lastLine = lines[lines.length - 1];
+      const metrics = this.ctx.measureText(lastLine);
+
+      const cursorX = x + metrics.width;
+      const cursorY = y + (lines.length - 1) * lineHeight;
+      this.ctx.fillStyle = "white";
+      this.ctx.fillRect(cursorX, cursorY - lineHeight, 1, lineHeight);
+    }
   };
 
   initDraw = () => {
@@ -388,5 +415,6 @@ export class Draw {
     window.removeEventListener("mouseup", this.mouseUpHandler);
     window.removeEventListener("click", this.mouseClickHandler);
     window.removeEventListener("keydown", this.typingHandler);
+    window.clearInterval(this.blinkInterval);
   };
 }
