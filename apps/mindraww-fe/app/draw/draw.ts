@@ -7,9 +7,10 @@ interface Rect {
 }
 interface Circle {
   type: "circle";
-  radius: number;
-  x: number;
-  y: number;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
 }
 interface FreePencil {
   type: "freePencil";
@@ -27,10 +28,10 @@ interface Line {
 }
 interface Diamond {
   type: "diamond";
-  centerX: number;
-  centerY: number;
-  width: number;
-  height: number;
+  startX: number;
+  startY: number;
+  endX: number;
+  endY: number;
 }
 interface Arrow {
   type: "arrow";
@@ -62,33 +63,37 @@ export class Draw {
   private startX: number = 0;
   private startY: number = 0;
   private isDrawing: boolean;
-  private selectedShape: ShapeTypes;
+  private selectedShape: ShapeTypes = "rect";
   private shapes: Shape[] = [];
   private currFreePencil: FreePencil | null = null;
   private isWriting: boolean = false;
   private text: string = "";
   private cursor: boolean = false;
   private blinkInterval: number = 0;
+  private canvas: HTMLCanvasElement;
+  private zoom: number = 1;
 
-  constructor(canvas: HTMLCanvasElement, selectedShape: ShapeTypes) {
+  constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
+    this.canvas = canvas;
     this.isDrawing = false;
-    this.selectedShape = selectedShape;
     this.clearCanvas();
     this.initDraw();
   }
 
   clearCanvas = () => {
+    this.ctx.save();
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.fillStyle = "rgba(0,0,0)";
     this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+    this.ctx.scale(this.zoom, this.zoom);
 
     this.shapes.map((shape) => {
       if (shape.type === "rect") {
         this.drawRect(shape.x, shape.y, shape.width, shape.height);
       }
       if (shape.type === "circle") {
-        this.drawCircle(shape.x, shape.y, shape.radius);
+        this.drawCircle(shape.startX, shape.startY, shape.endX, shape.endY);
       }
       if (shape.type === "freePencil") {
         shape.currX.map((_, i) => {
@@ -104,12 +109,7 @@ export class Draw {
         this.drawLine(shape.startX, shape.startY, shape.endX, shape.endY);
       }
       if (shape.type === "diamond") {
-        this.drawDiamond(
-          shape.centerX,
-          shape.centerY,
-          shape.width,
-          shape.height
-        );
+        this.drawDiamond(shape.startX, shape.startY, shape.endX, shape.endY);
       }
       if (shape.type === "arrow") {
         this.drawArrow(shape.fromX, shape.fromY, shape.toX, shape.toY);
@@ -118,6 +118,39 @@ export class Draw {
         this.writeText(shape.text, shape.x, shape.y, false);
       }
     });
+    this.ctx.restore();
+  };
+
+  setTool = (shape: ShapeTypes) => {
+    this.selectedShape = shape;
+    if (shape !== "text" && this.text.length > 0) {
+      this.shapes.push({
+        type: "text",
+        text: this.text,
+        x: this.startX,
+        y: this.startY,
+      });
+      this.cursor = false;
+      this.text = "";
+      this.isWriting = false;
+      this.clearCanvas();
+    } else if (shape !== "text" && this.text.length === 0) {
+      this.cursor = false;
+      this.text = "";
+      this.isWriting = false;
+      this.clearCanvas();
+    }
+  };
+
+  wheelHandler = (e: WheelEvent) => {
+    e.preventDefault();
+    const zoomFactor = 0.1;
+    if (e.deltaY < 0) {
+      this.zoom += zoomFactor;
+    } else {
+      this.zoom = Math.max(0.1, this.zoom - zoomFactor);
+    }
+    this.clearCanvas();
   };
 
   typingHandler = (e: KeyboardEvent) => {
@@ -135,7 +168,9 @@ export class Draw {
   };
 
   mouseClickHandler = (e: MouseEvent) => {
-    if (this.selectedShape !== "text") return;
+    if (this.selectedShape !== "text") {
+      return;
+    }
     if (this.isWriting) {
       this.shapes.push({
         type: "text",
@@ -144,6 +179,7 @@ export class Draw {
         y: this.startY,
       });
       this.isWriting = false;
+      this.cursor = false;
       this.text = "";
       this.clearCanvas();
     } else {
@@ -155,6 +191,7 @@ export class Draw {
       this.clearCanvas();
       this.cursor = true;
       this.blinkInterval = window.setInterval(() => {
+        // console.log(this.isWriting);
         if (this.isWriting) {
           this.cursor = !this.cursor;
           this.clearCanvas();
@@ -192,10 +229,12 @@ export class Draw {
       this.drawRect(this.startX, this.startY, width, height);
     }
     if (this.selectedShape === "circle") {
-      const radius = Math.max(width, height) / 2;
-      const centerX = this.startX + radius;
-      const centerY = this.startY + radius;
-      this.drawCircle(centerX, centerY, radius);
+      this.drawCircle(
+        this.startX - this.canvas.offsetLeft,
+        this.startY - this.canvas.offsetTop,
+        e.clientX - this.canvas.offsetLeft,
+        e.clientY - this.canvas.offsetTop
+      );
     }
     if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
@@ -224,10 +263,12 @@ export class Draw {
       this.drawLine(this.startX, this.startY, e.clientX, e.clientY);
     }
     if (this.selectedShape === "diamond") {
-      const radius = Math.max(width, height) / 2;
-      const centerX = this.startX + radius;
-      const centerY = this.startY + radius;
-      this.drawDiamond(centerX, centerY, width, height);
+      this.drawDiamond(
+        this.startX - this.canvas.offsetLeft,
+        this.startY - this.canvas.offsetTop,
+        e.clientX - this.canvas.offsetLeft,
+        e.clientY - this.canvas.offsetTop
+      );
     }
     if (this.selectedShape === "arrow") {
       this.drawArrow(this.startX, this.startY, e.clientX, e.clientY);
@@ -247,14 +288,12 @@ export class Draw {
         y: this.startY,
       });
     } else if (this.selectedShape === "circle") {
-      const radius = Math.max(width, height) / 2;
-      const centerX = this.startX + radius;
-      const centerY = this.startY + radius;
       this.shapes.push({
         type: this.selectedShape,
-        radius,
-        x: centerX,
-        y: centerY,
+        startX: this.startX - this.canvas.offsetLeft,
+        startY: this.startY - this.canvas.offsetTop,
+        endX: e.clientX - this.canvas.offsetLeft,
+        endY: e.clientY - this.canvas.offsetTop,
       });
     } else if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
@@ -270,15 +309,12 @@ export class Draw {
         endY: e.clientY,
       });
     } else if (this.selectedShape === "diamond") {
-      const radius = Math.max(width, height) / 2;
-      const centerX = this.startX + radius;
-      const centerY = this.startY + radius;
       this.shapes.push({
         type: this.selectedShape,
-        centerX,
-        centerY,
-        width,
-        height,
+        startX: this.startX - this.canvas.offsetLeft,
+        startY: this.startY - this.canvas.offsetTop,
+        endX: e.clientX - this.canvas.offsetLeft,
+        endY: e.clientY - this.canvas.offsetTop,
       });
     } else if (this.selectedShape === "arrow") {
       this.shapes.push({
@@ -297,9 +333,14 @@ export class Draw {
     this.ctx.lineWidth = 2;
   };
 
-  drawCircle = (X: number, Y: number, radius: number) => {
+  drawCircle = (X: number, Y: number, currX: number, currY: number) => {
+    const centerX = (X + currX) / 2;
+    const centerY = (Y + currY) / 2;
+    const radiousX = Math.abs(currX - X) / 2;
+    const radiousY = Math.abs(currY - Y) / 2;
+
     this.ctx.beginPath();
-    this.ctx.arc(X, Y, radius, 0, 2 * Math.PI);
+    this.ctx.ellipse(centerX, centerY, radiousX, radiousY, 0, 0, 2 * Math.PI);
     this.ctx.strokeStyle = "rgba(255,255,255)";
     this.ctx.stroke();
   };
@@ -328,11 +369,16 @@ export class Draw {
   };
 
   drawDiamond = (
-    centerX: number,
-    centerY: number,
-    width: number,
-    height: number
+    startX: number,
+    startY: number,
+    currX: number,
+    currY: number
   ) => {
+    const centerX = (startX + currX) / 2;
+    const centerY = (startY + currY) / 2;
+    const width = Math.abs(currX - startX);
+    const height = Math.abs(currY - startY);
+
     this.ctx.strokeStyle = "rgba(255,255,255)";
     this.ctx.lineWidth = 2;
     this.ctx.beginPath();
@@ -398,22 +444,25 @@ export class Draw {
   };
 
   initDraw = () => {
-    window.addEventListener("mousedown", this.mouseDownHandler);
+    this.canvas.addEventListener("mousedown", this.mouseDownHandler);
 
-    window.addEventListener("mousemove", this.mouseMoveHandler);
+    this.canvas.addEventListener("mousemove", this.mouseMoveHandler);
 
-    window.addEventListener("mouseup", this.mouseUpHandler);
+    this.canvas.addEventListener("mouseup", this.mouseUpHandler);
 
-    window.addEventListener("click", this.mouseClickHandler);
+    this.canvas.addEventListener("click", this.mouseClickHandler);
+
+    this.canvas.addEventListener("wheel", this.wheelHandler);
 
     window.addEventListener("keydown", this.typingHandler);
   };
 
   eventRemover = () => {
-    window.removeEventListener("mousedown", this.mouseDownHandler);
-    window.removeEventListener("mousemove", this.mouseMoveHandler);
-    window.removeEventListener("mouseup", this.mouseUpHandler);
-    window.removeEventListener("click", this.mouseClickHandler);
+    this.canvas.removeEventListener("mousedown", this.mouseDownHandler);
+    this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
+    this.canvas.removeEventListener("mouseup", this.mouseUpHandler);
+    this.canvas.removeEventListener("click", this.mouseClickHandler);
+    this.canvas.removeEventListener("wheel", this.wheelHandler);
     window.removeEventListener("keydown", this.typingHandler);
     window.clearInterval(this.blinkInterval);
   };

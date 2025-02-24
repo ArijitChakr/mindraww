@@ -6,17 +6,23 @@ import { useEffect, useRef, useState } from "react";
 
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [game, setGame] = useState<Draw>();
   const [selectedShape, setSelectedShape] = useState<ShapeTypes>("rect");
 
   useEffect(() => {
-    if (canvasRef.current) {
-      const draw = new Draw(canvasRef.current, selectedShape);
+    game?.setTool(selectedShape);
+  }, [selectedShape, game]);
 
+  useEffect(() => {
+    if (canvasRef.current) {
+      const draw = new Draw(canvasRef.current);
+      setGame(draw);
       return () => {
         draw.eventRemover();
       };
     }
-  }, [canvasRef, selectedShape]);
+  }, [canvasRef]);
+
   return (
     <div className="w-screen h-screen overflow-hidden">
       <canvas
