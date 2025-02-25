@@ -46,8 +46,23 @@ interface Text {
   x: number;
   y: number;
 }
+interface Pan {
+  type: "pan";
+}
+interface Selection {
+  type: "selection";
+}
 
-type Shape = Rect | Circle | FreePencil | Line | Diamond | Arrow | Text;
+type Shape =
+  | Rect
+  | Circle
+  | FreePencil
+  | Line
+  | Diamond
+  | Arrow
+  | Text
+  | Pan
+  | Selection;
 
 export type ShapeTypes =
   | "rect"
@@ -56,14 +71,16 @@ export type ShapeTypes =
   | "line"
   | "diamond"
   | "arrow"
-  | "text";
+  | "text"
+  | "pan"
+  | "selection";
 
 export class Draw {
   private ctx: CanvasRenderingContext2D;
   private startX: number = 0;
   private startY: number = 0;
   private isDrawing: boolean;
-  private selectedShape: ShapeTypes = "rect";
+  public selectedShape: ShapeTypes = "selection";
   private shapes: Shape[] = [];
   private currFreePencil: FreePencil | null = null;
   private isWriting: boolean = false;
@@ -72,6 +89,13 @@ export class Draw {
   private blinkInterval: number = 0;
   private canvas: HTMLCanvasElement;
   private zoom: number = 1;
+  private offsetX: number = 0;
+  private offsetY: number = 0;
+  private isPanning: boolean = false;
+  private panStartX: number = 0;
+  private panStartY: number = 0;
+  private panOffsetX: number = 0;
+  private panOffsetY: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.ctx = canvas.getContext("2d")!;
@@ -82,11 +106,18 @@ export class Draw {
   }
 
   clearCanvas = () => {
-    this.ctx.save();
+    this.ctx.setTransform(1, 0, 0, 1, 0, 0);
     this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
     this.ctx.fillStyle = "rgba(0,0,0)";
     this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-    this.ctx.scale(this.zoom, this.zoom);
+    this.ctx.setTransform(
+      this.zoom,
+      0,
+      0,
+      this.zoom,
+      this.offsetX,
+      this.offsetY
+    );
 
     this.shapes.map((shape) => {
       if (shape.type === "rect") {
@@ -140,16 +171,24 @@ export class Draw {
       this.isWriting = false;
       this.clearCanvas();
     }
+    return this.selectedShape;
   };
 
   wheelHandler = (e: WheelEvent) => {
     e.preventDefault();
+
     const zoomFactor = 0.1;
-    if (e.deltaY < 0) {
-      this.zoom += zoomFactor;
-    } else {
-      this.zoom = Math.max(0.1, this.zoom - zoomFactor);
-    }
+    const scaleFactor = e.deltaY < 0 ? 1 + zoomFactor : 1 - zoomFactor;
+    const newZoom = Math.max(0.1, this.zoom * scaleFactor);
+
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+
+    this.offsetX = centerX - (centerX - this.offsetX) * (newZoom / this.zoom);
+    this.offsetY = centerY - (centerY - this.offsetY) * (newZoom / this.zoom);
+
+    this.zoom = newZoom;
+
     this.clearCanvas();
   };
 
@@ -181,13 +220,16 @@ export class Draw {
       this.isWriting = false;
       this.cursor = false;
       this.text = "";
+      this.selectedShape = "selection";
       this.clearCanvas();
     } else {
       window.clearInterval(this.blinkInterval);
       this.isWriting = true;
       this.text = "";
-      this.startX = e.clientX;
-      this.startY = e.clientY;
+      const worldX = (e.clientX - this.offsetX) / this.zoom;
+      const worldY = (e.clientY - this.offsetY) / this.zoom;
+      this.startX = worldX;
+      this.startY = worldY;
       this.clearCanvas();
       this.cursor = true;
       this.blinkInterval = window.setInterval(() => {
@@ -203,38 +245,55 @@ export class Draw {
 
   mouseDownHandler = (e: MouseEvent) => {
     if (this.selectedShape === "text") return;
-    this.startX = e.clientX;
-    this.startY = e.clientY;
+    if (this.selectedShape === "pan") {
+      this.isPanning = true;
+      this.panStartX = e.clientX;
+      this.panStartY = e.clientY;
+      this.panOffsetX = this.offsetX;
+      this.panOffsetY = this.offsetY;
+      return;
+    }
+
+    const X = (e.clientX - this.offsetX) / this.zoom;
+    const Y = (e.clientY - this.offsetY) / this.zoom;
+
+    this.startX = X;
+    this.startY = Y;
     this.isDrawing = true;
 
     if (this.selectedShape === "freePencil") {
       this.currFreePencil = {
         type: "freePencil",
-        currX: [e.clientX],
-        currY: [e.clientY],
-        lastX: [e.clientX],
-        lastY: [e.clientY],
+        currX: [X],
+        currY: [Y],
+        lastX: [Y],
+        lastY: [Y],
       };
     }
   };
 
   mouseMoveHandler = (e: MouseEvent) => {
     if (this.selectedShape === "text") return;
+    if (this.selectedShape === "pan" && this.isPanning) {
+      const dx = e.clientX - this.panStartX;
+      const dy = e.clientY - this.panStartY;
+      this.offsetX = this.panOffsetX + dx;
+      this.offsetY = this.panOffsetY + dy;
+      this.clearCanvas();
+      return;
+    }
     if (!this.isDrawing) return;
+    const worldX = (e.clientX - this.offsetX) / this.zoom;
+    const worldY = (e.clientY - this.offsetY) / this.zoom;
     this.clearCanvas();
-    const width = e.clientX - this.startX;
-    const height = e.clientY - this.startY;
 
     if (this.selectedShape === "rect") {
+      const width = worldX - this.startX;
+      const height = worldY - this.startY;
       this.drawRect(this.startX, this.startY, width, height);
     }
     if (this.selectedShape === "circle") {
-      this.drawCircle(
-        this.startX - this.canvas.offsetLeft,
-        this.startY - this.canvas.offsetTop,
-        e.clientX - this.canvas.offsetLeft,
-        e.clientY - this.canvas.offsetTop
-      );
+      this.drawCircle(this.startX, this.startY, worldX, worldY);
     }
     if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
@@ -252,34 +311,35 @@ export class Draw {
 
       this.currFreePencil.lastX.push(this.startX);
       this.currFreePencil.lastY.push(this.startY);
-      this.currFreePencil.currX.push(e.clientX);
-      this.currFreePencil.currY.push(e.clientY);
+      this.currFreePencil.currX.push(worldX);
+      this.currFreePencil.currY.push(worldY);
 
-      this.startX = e.clientX;
-      this.startY = e.clientY;
+      this.startX = worldX;
+      this.startY = worldY;
     }
 
     if (this.selectedShape === "line") {
-      this.drawLine(this.startX, this.startY, e.clientX, e.clientY);
+      this.drawLine(this.startX, this.startY, worldX, worldY);
     }
     if (this.selectedShape === "diamond") {
-      this.drawDiamond(
-        this.startX - this.canvas.offsetLeft,
-        this.startY - this.canvas.offsetTop,
-        e.clientX - this.canvas.offsetLeft,
-        e.clientY - this.canvas.offsetTop
-      );
+      this.drawDiamond(this.startX, this.startY, worldX, worldY);
     }
     if (this.selectedShape === "arrow") {
-      this.drawArrow(this.startX, this.startY, e.clientX, e.clientY);
+      this.drawArrow(this.startX, this.startY, worldX, worldY);
     }
   };
 
   mouseUpHandler = (e: MouseEvent) => {
+    if (this.selectedShape === "pan") {
+      this.isPanning = false;
+      return;
+    }
     this.isDrawing = false;
-    const width = e.clientX - this.startX;
-    const height = e.clientY - this.startY;
+    const worldX = (e.clientX - this.offsetX) / this.zoom;
+    const worldY = (e.clientY - this.offsetY) / this.zoom;
     if (this.selectedShape === "rect") {
+      const width = worldX - this.startX;
+      const height = worldY - this.startY;
       this.shapes.push({
         type: this.selectedShape,
         width,
@@ -289,11 +349,11 @@ export class Draw {
       });
     } else if (this.selectedShape === "circle") {
       this.shapes.push({
-        type: this.selectedShape,
-        startX: this.startX - this.canvas.offsetLeft,
-        startY: this.startY - this.canvas.offsetTop,
-        endX: e.clientX - this.canvas.offsetLeft,
-        endY: e.clientY - this.canvas.offsetTop,
+        type: "circle",
+        startX: this.startX,
+        startY: this.startY,
+        endX: worldX,
+        endY: worldY,
       });
     } else if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
@@ -302,27 +362,27 @@ export class Draw {
       this.currFreePencil = null;
     } else if (this.selectedShape === "line") {
       this.shapes.push({
-        type: this.selectedShape,
+        type: "line",
         startX: this.startX,
         startY: this.startY,
-        endX: e.clientX,
-        endY: e.clientY,
+        endX: worldX,
+        endY: worldY,
       });
     } else if (this.selectedShape === "diamond") {
       this.shapes.push({
-        type: this.selectedShape,
-        startX: this.startX - this.canvas.offsetLeft,
-        startY: this.startY - this.canvas.offsetTop,
-        endX: e.clientX - this.canvas.offsetLeft,
-        endY: e.clientY - this.canvas.offsetTop,
+        type: "diamond",
+        startX: this.startX,
+        startY: this.startY,
+        endX: worldX,
+        endY: worldY,
       });
     } else if (this.selectedShape === "arrow") {
       this.shapes.push({
-        type: this.selectedShape,
+        type: "arrow",
         fromX: this.startX,
         fromY: this.startY,
-        toX: e.clientX,
-        toY: e.clientY,
+        toX: worldX,
+        toY: worldY,
       });
     }
   };

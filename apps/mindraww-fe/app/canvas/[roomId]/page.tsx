@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 export default function Canvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [game, setGame] = useState<Draw>();
-  const [selectedShape, setSelectedShape] = useState<ShapeTypes>("rect");
+  const [selectedShape, setSelectedShape] = useState<ShapeTypes>("selection");
 
   useEffect(() => {
     game?.setTool(selectedShape);

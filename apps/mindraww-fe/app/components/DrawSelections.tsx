@@ -1,7 +1,9 @@
 import {
   Circle,
   Diamond,
+  Hand,
   Minus,
+  MousePointer,
   MoveRight,
   Pencil,
   Square,
@@ -18,7 +20,19 @@ export default function DrawSelections({
   selectedShape: ShapeTypes;
 }) {
   return (
-    <div className="absolute top-10 left-[35%] flex gap-10 items-center justify-center rounded-full bg-white/20 py-2 px-6">
+    <div className="absolute top-10 left-[30%] flex gap-10 items-center justify-center rounded-full bg-white/20 py-2 px-6">
+      <div
+        onClick={() => setShape("pan")}
+        className={`${selectedShape === "pan" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+      >
+        <Hand className="w-8 h-8 text-white cursor-pointer" />
+      </div>
+      <div
+        onClick={() => setShape("selection")}
+        className={`${selectedShape === "selection" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+      >
+        <MousePointer className="w-8 h-8 text-white cursor-pointer" />
+      </div>
       <div
         onClick={() => setShape("rect")}
         className={`${selectedShape === "rect" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
