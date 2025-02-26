@@ -150,8 +150,15 @@ export class Draw {
       }
       if (shape.type === "line") {
         if (shape.bendX !== undefined && shape.bendY !== undefined) {
-          this.drawLine(shape.startX, shape.startY, shape.bendX, shape.bendY);
-          this.drawLine(shape.bendX, shape.bendY, shape.endX, shape.endY);
+          this.drawBendedLine(
+            shape.type,
+            shape.startX,
+            shape.startY,
+            shape.endX,
+            shape.endY,
+            shape.bendX,
+            shape.bendY
+          );
         } else {
           this.drawLine(shape.startX, shape.startY, shape.endX, shape.endY);
         }
@@ -161,8 +168,15 @@ export class Draw {
       }
       if (shape.type === "arrow") {
         if (shape.bendX !== undefined && shape.bendY !== undefined) {
-          this.drawArrow(shape.fromX, shape.fromY, shape.bendX, shape.bendY);
-          this.drawArrow(shape.bendX, shape.bendY, shape.toX, shape.toY);
+          this.drawBendedLine(
+            shape.type,
+            shape.fromX,
+            shape.fromY,
+            shape.toX,
+            shape.toY,
+            shape.bendX,
+            shape.bendY
+          );
         } else {
           this.drawArrow(shape.fromX, shape.fromY, shape.toX, shape.toY);
         }
@@ -758,11 +772,35 @@ export class Draw {
       ];
     }
   }
+  // drawSelectionBox(shape: Shape) {
+  //   const bbox = this.getBoundingBox(shape);
+  //   this.ctx.save();
+  //   this.ctx.strokeStyle = "blue";
+  //   this.ctx.lineWidth = 2;
+  //   this.ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+  //   const handleSize = 8;
+  //   const half = handleSize / 2;
+  //   const handles = [
+  //     { x: bbox.x - half, y: bbox.y - half },
+  //     { x: bbox.x + bbox.width - half, y: bbox.y - half },
+  //     { x: bbox.x - half, y: bbox.y + bbox.height - half },
+  //     { x: bbox.x + bbox.width - half, y: bbox.y + bbox.height - half },
+  //   ];
+  //   this.ctx.fillStyle = "blue";
+  //   handles.forEach((h) => {
+  //     this.ctx.fillRect(h.x, h.y, handleSize, handleSize);
+  //   });
+  //   this.ctx.restore();
+  // }
 
-  drawSelectionHandles(shape: Shape) {
+  drawSelectionBox(shape: Shape) {
     const handles = this.getSelectionHandles(shape);
-    const handleSize = 8;
+    const bbox = this.getBoundingBox(shape);
     this.ctx.save();
+    this.ctx.strokeStyle = "blue";
+    this.ctx.lineWidth = 2;
+    this.ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
+    const handleSize = 8;
     if (shape.type === "line" || shape.type === "arrow") {
       this.ctx.fillStyle = "blue";
       handles.forEach((h) => {
@@ -788,8 +826,14 @@ export class Draw {
       if (shape.type === "line") {
         if (shape.bendX !== undefined && shape.bendY !== undefined) {
           this.ctx.moveTo(shape.startX, shape.startY);
-          this.ctx.lineTo(shape.bendX, shape.bendY);
-          this.ctx.lineTo(shape.endX, shape.endY);
+          this.ctx.bezierCurveTo(
+            shape.bendX,
+            shape.bendY,
+            shape.bendX,
+            shape.bendY,
+            shape.endX,
+            shape.endY
+          );
         } else {
           this.ctx.moveTo(shape.startX, shape.startY);
           this.ctx.lineTo(shape.endX, shape.endY);
@@ -797,8 +841,14 @@ export class Draw {
       } else {
         if (shape.bendX !== undefined && shape.bendY !== undefined) {
           this.ctx.moveTo(shape.fromX, shape.fromY);
-          this.ctx.lineTo(shape.bendX, shape.bendY);
-          this.ctx.lineTo(shape.toX, shape.toY);
+          this.ctx.bezierCurveTo(
+            shape.bendX,
+            shape.bendY,
+            shape.bendX,
+            shape.bendY,
+            shape.toX,
+            shape.toY
+          );
         } else {
           this.ctx.moveTo(shape.fromX, shape.fromY);
           this.ctx.lineTo(shape.toX, shape.toY);
@@ -811,7 +861,7 @@ export class Draw {
       this.ctx.lineWidth = 2;
       this.ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
     }
-    this.drawSelectionHandles(shape);
+    this.drawSelectionBox(shape);
     this.ctx.restore();
   }
 
@@ -1046,25 +1096,29 @@ export class Draw {
     }
   }
 
-  drawSelectionBox(shape: Shape) {
-    const bbox = this.getBoundingBox(shape);
-    this.ctx.save();
-    this.ctx.strokeStyle = "blue";
+  drawBendedLine(
+    type: "arrow" | "line",
+    startX: number,
+    startY: number,
+    endX: number,
+    endY: number,
+    bendX: number,
+    bendY: number
+  ) {
+    this.ctx.beginPath();
+    this.ctx.strokeStyle = "rgba(255,255,255)";
     this.ctx.lineWidth = 2;
-    this.ctx.strokeRect(bbox.x, bbox.y, bbox.width, bbox.height);
-    const handleSize = 8;
-    const half = handleSize / 2;
-    const handles = [
-      { x: bbox.x - half, y: bbox.y - half },
-      { x: bbox.x + bbox.width - half, y: bbox.y - half },
-      { x: bbox.x - half, y: bbox.y + bbox.height - half },
-      { x: bbox.x + bbox.width - half, y: bbox.y + bbox.height - half },
-    ];
-    this.ctx.fillStyle = "blue";
-    handles.forEach((h) => {
-      this.ctx.fillRect(h.x, h.y, handleSize, handleSize);
-    });
-    this.ctx.restore();
+    const controlX = 2 * bendX - (startX + endX) / 2;
+    const controlY = 2 * bendY - (startY + endY) / 2;
+    this.ctx.moveTo(startX, startY);
+    this.ctx.quadraticCurveTo(controlX, controlY, endX, endY);
+    this.ctx.stroke();
+    if (type === "arrow") {
+      const dx = endX - controlX;
+      const dy = endY - controlY;
+      const angle = Math.atan2(dy, dx);
+      this.drawArrowHead(endX, endY, angle);
+    }
   }
 
   drawRect = (X: number, Y: number, width: number, height: number) => {
@@ -1131,29 +1185,31 @@ export class Draw {
   };
 
   drawArrow = (fromX: number, fromY: number, toX: number, toY: number) => {
-    const arrowHeadLength = 10;
     this.ctx.beginPath();
     this.ctx.moveTo(fromX, fromY);
     this.ctx.lineTo(toX, toY);
     this.ctx.strokeStyle = "white";
     this.ctx.lineWidth = 2;
     this.ctx.stroke();
-
     const angle = Math.atan2(toY - fromY, toX - fromX);
+    this.drawArrowHead(toX, toY, angle);
+  };
 
+  drawArrowHead = (x: number, y: number, angle: number) => {
+    const arrowHeadLength = 10;
     const arrowAngle1 = angle - Math.PI / 6;
     const arrowAngle2 = angle + Math.PI / 6;
 
-    const arrowPoint1X = toX - arrowHeadLength * Math.cos(arrowAngle1);
-    const arrowPoint1Y = toY - arrowHeadLength * Math.sin(arrowAngle1);
+    const arrowPoint1X = x - arrowHeadLength * Math.cos(arrowAngle1);
+    const arrowPoint1Y = y - arrowHeadLength * Math.sin(arrowAngle1);
 
-    const arrowPoint2X = toX - arrowHeadLength * Math.cos(arrowAngle2);
-    const arrowPoint2Y = toY - arrowHeadLength * Math.sin(arrowAngle2);
+    const arrowPoint2X = x - arrowHeadLength * Math.cos(arrowAngle2);
+    const arrowPoint2Y = y - arrowHeadLength * Math.sin(arrowAngle2);
 
     this.ctx.beginPath();
-    this.ctx.moveTo(toX, toY);
+    this.ctx.moveTo(x, y);
     this.ctx.lineTo(arrowPoint1X, arrowPoint1Y);
-    this.ctx.moveTo(toX, toY);
+    this.ctx.moveTo(x, y);
     this.ctx.lineTo(arrowPoint2X, arrowPoint2Y);
     this.ctx.stroke();
   };
