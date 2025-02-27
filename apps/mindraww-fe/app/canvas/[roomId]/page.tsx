@@ -26,6 +26,9 @@ export default function Canvas() {
   return (
     <div className="w-screen h-screen overflow-hidden">
       <canvas
+        style={{
+          cursor: `${selectedShape === "selection" ? "default" : selectedShape === "pan" ? "grab" : selectedShape === "text" ? "text" : "crosshair"}`,
+        }}
         ref={canvasRef}
         width={window.innerWidth}
         height={window.innerHeight}

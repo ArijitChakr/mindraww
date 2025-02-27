@@ -96,7 +96,7 @@ export class Draw {
   private zoom: number = 1;
   private offsetX: number = 0;
   private offsetY: number = 0;
-  private isPanning: boolean = false;
+  public isPanning: boolean = false;
   private panStartX: number = 0;
   private panStartY: number = 0;
   private panOffsetX: number = 0;
