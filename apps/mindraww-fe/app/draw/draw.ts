@@ -57,6 +57,9 @@ interface Pan {
 interface Selection {
   type: "selection";
 }
+interface Eraser {
+  type: "eraser";
+}
 
 type Shape =
   | Rect
@@ -67,7 +70,8 @@ type Shape =
   | Arrow
   | Text
   | Pan
-  | Selection;
+  | Selection
+  | Eraser;
 
 export type ShapeTypes =
   | "rect"
@@ -78,7 +82,8 @@ export type ShapeTypes =
   | "arrow"
   | "text"
   | "pan"
-  | "selection";
+  | "selection"
+  | "eraser";
 
 export class Draw {
   private ctx: CanvasRenderingContext2D;
@@ -108,11 +113,15 @@ export class Draw {
   private resizingHandle: string | null = null;
   private dragOffsetX: number = 0;
   private dragOffsetY: number = 0;
+  private roomId: string;
+  socket: WebSocket;
 
-  constructor(canvas: HTMLCanvasElement) {
+  constructor(canvas: HTMLCanvasElement, socket: WebSocket, roomId: string) {
     this.ctx = canvas.getContext("2d")!;
     this.canvas = canvas;
     this.isDrawing = false;
+    this.roomId = roomId;
+    this.socket = socket;
     this.clearCanvas();
     this.initDraw();
   }
@@ -279,7 +288,39 @@ export class Draw {
         }, 500);
       }
     }
-    if (this.selectedShape === "selection") {
+    if (this.selectedShape === "eraser") {
+      const erasable = this.shapes.find((shape) => {
+        if (shape.type === "rect") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "circle") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "freePencil") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "line") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "arrow") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "text") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        } else if (shape.type === "diamond") {
+          const bbox = this.getBoundingBox(shape);
+          return this.pointInRect(e.clientX, e.clientY, bbox);
+        }
+      });
+      // console.log(erasable);
+      if (erasable) {
+        const index = this.shapes.indexOf(erasable);
+        this.shapes.splice(index, 1);
+        this.clearCanvas();
+        // console.log(index);
+        // this.shapes = this.shapes.filter((shape) => shape !== erasable);
+      }
     }
   };
 

@@ -1,6 +1,7 @@
 import {
   Circle,
   Diamond,
+  Eraser,
   Hand,
   Minus,
   MousePointer,
@@ -20,7 +21,7 @@ export default function DrawSelections({
   selectedShape: ShapeTypes;
 }) {
   return (
-    <div className="absolute top-10 left-[30%] flex gap-10 items-center justify-center rounded-full bg-white/20 py-2 px-6">
+    <div className="absolute top-10 left-[28%] flex gap-10 items-center justify-center rounded-full bg-white/20 py-2 px-6">
       <div
         onClick={() => setShape("pan")}
         className={`${selectedShape === "pan" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
@@ -74,6 +75,12 @@ export default function DrawSelections({
         className={`${selectedShape === "text" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Type className="w-8 h-8 text-white cursor-pointer" />
+      </div>
+      <div
+        onClick={() => setShape("eraser")}
+        className={`${selectedShape === "eraser" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+      >
+        <Eraser className="w-8 h-8 text-white cursor-pointer" />
       </div>
     </div>
   );
