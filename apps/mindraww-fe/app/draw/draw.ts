@@ -1,3 +1,5 @@
+import { getShapes } from "./getShapes";
+
 interface Rect {
   type: "rect";
   width: number;
@@ -114,6 +116,7 @@ export class Draw {
   private dragOffsetX: number = 0;
   private dragOffsetY: number = 0;
   private roomId: string;
+  private currDrawing: Shape | null = null;
   socket: WebSocket;
 
   constructor(canvas: HTMLCanvasElement, socket: WebSocket, roomId: string) {
@@ -122,9 +125,32 @@ export class Draw {
     this.isDrawing = false;
     this.roomId = roomId;
     this.socket = socket;
-    this.clearCanvas();
+    this.initShapes();
     this.initDraw();
+    this.initChat();
+    this.clearCanvas();
   }
+
+  initShapes = async () => {
+    this.shapes = await getShapes(this.roomId);
+    this.clearCanvas();
+  };
+
+  initChat = () => {
+    this.socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "chat") {
+        if (message.isDrawing) {
+          this.currDrawing = JSON.parse(message.payload.message);
+          this.clearCanvas();
+        } else {
+          this.currDrawing = null;
+          this.shapes.push(JSON.parse(message.payload.message));
+          this.clearCanvas();
+        }
+      }
+    };
+  };
 
   clearCanvas = () => {
     this.ctx.setTransform(1, 0, 0, 1, 0, 0);
@@ -251,6 +277,16 @@ export class Draw {
       }
       this.clearCanvas();
       this.writeText(this.text, this.startX, this.startY);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify(this.text),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
   };
 
