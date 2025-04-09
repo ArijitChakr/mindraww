@@ -12,7 +12,7 @@
 ## 🛠️ Tech Stack
 
 - **Frontend:** [Next.js](https://nextjs.org/), [TypeScript](https://www.typescriptlang.org/), [Tailwind CSS](https://tailwindcss.com/)
-- **Backend:** [Express.js], [WebSockets](https://www.npmjs.com/package/ws)
+- **Backend:** [Express.js](https://expressjs.com/), [WebSockets](https://www.npmjs.com/package/ws)
 - **Database:** [PostgreSQL](https://www.postgresql.org/)
 - **Monorepo:** [Turborepo](https://turbo.build/repo) for managing shared packages and apps
 
