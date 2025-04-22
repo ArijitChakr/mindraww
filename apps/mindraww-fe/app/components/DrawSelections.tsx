@@ -10,7 +10,7 @@ import {
   Square,
   Type,
 } from "lucide-react";
-import { Dispatch } from "react";
+import { Dispatch, useEffect, useState } from "react";
 import { ShapeTypes } from "../draw/draw";
 
 export default function DrawSelections({
@@ -20,65 +20,101 @@ export default function DrawSelections({
   setShape: Dispatch<React.SetStateAction<ShapeTypes>>;
   selectedShape: ShapeTypes;
 }) {
+  const [curShape, setCurShape] = useState<ShapeTypes>(selectedShape);
+
+  useEffect(() => {
+    setCurShape(selectedShape);
+  }, [selectedShape]);
+
   return (
     <div className="absolute top-10 left-[28%] flex gap-10 items-center justify-center rounded-full bg-white/20 py-2 px-6">
       <div
-        onClick={() => setShape("pan")}
-        className={`${selectedShape === "pan" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("pan");
+          setCurShape("pan");
+        }}
+        className={`${curShape === "pan" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Hand className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("selection")}
-        className={`${selectedShape === "selection" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("selection");
+          setCurShape("selection");
+        }}
+        className={`${curShape === "selection" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <MousePointer className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("rect")}
-        className={`${selectedShape === "rect" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("rect");
+          setCurShape("rect");
+        }}
+        className={`${curShape === "rect" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Square className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("circle")}
-        className={`${selectedShape === "circle" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("circle");
+          setCurShape("circle");
+        }}
+        className={`${curShape === "circle" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Circle className="w-8 h-8 text-white  cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("diamond")}
-        className={`${selectedShape === "diamond" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("diamond");
+          setCurShape("diamond");
+        }}
+        className={`${curShape === "diamond" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Diamond className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("line")}
-        className={`${selectedShape === "line" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("line");
+          setCurShape("line");
+        }}
+        className={`${curShape === "line" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Minus className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("arrow")}
-        className={`${selectedShape === "arrow" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("arrow");
+          setCurShape("arrow");
+        }}
+        className={`${curShape === "arrow" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <MoveRight className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("freePencil")}
-        className={`${selectedShape === "freePencil" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("freePencil");
+          setCurShape("freePencil");
+        }}
+        className={`${curShape === "freePencil" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Pencil className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("text")}
-        className={`${selectedShape === "text" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("text");
+          setCurShape("text");
+        }}
+        className={`${curShape === "text" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Type className="w-8 h-8 text-white cursor-pointer" />
       </div>
       <div
-        onClick={() => setShape("eraser")}
-        className={`${selectedShape === "eraser" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
+        onClick={() => {
+          setShape("eraser");
+          setCurShape("eraser");
+        }}
+        className={`${curShape === "eraser" && "border border-blue-600 bg-blue-600/10"} p-2 rounded-full`}
       >
         <Eraser className="w-8 h-8 text-white cursor-pointer" />
       </div>

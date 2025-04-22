@@ -1,4 +1,5 @@
 import { getShapes } from "./getShapes";
+import { v4 as uuidv4 } from "uuid";
 
 interface Rect {
   type: "rect";
@@ -63,7 +64,7 @@ interface Eraser {
   type: "eraser";
 }
 
-type Shape =
+type Shape = (
   | Rect
   | Circle
   | FreePencil
@@ -73,7 +74,8 @@ type Shape =
   | Text
   | Pan
   | Selection
-  | Eraser;
+  | Eraser
+) & { shapeId: string };
 
 export type ShapeTypes =
   | "rect"
@@ -118,13 +120,21 @@ export class Draw {
   private roomId: string;
   private currDrawing: Shape | null = null;
   socket: WebSocket;
+  private onShapeChange?: (shape: ShapeTypes) => void;
 
-  constructor(canvas: HTMLCanvasElement, socket: WebSocket, roomId: string) {
+  constructor(
+    canvas: HTMLCanvasElement,
+    socket: WebSocket,
+    roomId: string,
+    onShapeChange?: (shape: ShapeTypes) => void
+  ) {
     this.ctx = canvas.getContext("2d")!;
     this.canvas = canvas;
     this.isDrawing = false;
     this.roomId = roomId;
     this.socket = socket;
+    this.onShapeChange = onShapeChange;
+    this.resizeCanvas();
     this.initShapes();
     this.initDraw();
     this.initChat();
@@ -132,7 +142,28 @@ export class Draw {
   }
 
   initShapes = async () => {
-    this.shapes = await getShapes(this.roomId);
+    const shapes = await getShapes(this.roomId);
+    this.shapes = shapes;
+    this.clearCanvas();
+  };
+
+  private isShapeEqual = (shape1: Shape, shape2: Shape): boolean => {
+    return JSON.stringify(shape1) === JSON.stringify(shape2);
+  };
+
+  private resizeCanvas = () => {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+
+    this.canvas.width = width;
+    this.canvas.height = height;
+
+    const scale = window.devicePixelRatio || 1;
+    this.ctx.scale(scale, scale);
+
     this.clearCanvas();
   };
 
@@ -143,9 +174,29 @@ export class Draw {
         if (message.isDrawing) {
           this.currDrawing = JSON.parse(message.payload.message);
           this.clearCanvas();
-        } else {
+        } else if (
+          !message.isDrawing &&
+          message.payload.type !== "erase" &&
+          message.payload.type !== "update"
+        ) {
           this.currDrawing = null;
           this.shapes.push(JSON.parse(message.payload.message));
+          this.clearCanvas();
+        } else if (message.payload.type === "erase") {
+          const index = this.shapes.findIndex((shape) =>
+            this.isShapeEqual(shape, JSON.parse(message.payload.message))
+          );
+          if (index === -1) return;
+          this.shapes.splice(index, 1);
+          this.clearCanvas();
+        } else if (message.payload.type === "update") {
+          const updatedShape = JSON.parse(message.payload.message);
+          console.log(updatedShape);
+          const index = this.shapes.findIndex(
+            (shape) => shape.shapeId === updatedShape.shapeId
+          );
+          if (index === -1) return;
+          this.shapes[index] = updatedShape;
           this.clearCanvas();
         }
       }
@@ -165,61 +216,12 @@ export class Draw {
       this.offsetX,
       this.offsetY
     );
-
     this.shapes.map((shape) => {
-      if (shape.type === "rect") {
-        this.drawRect(shape.x, shape.y, shape.width, shape.height);
-      }
-      if (shape.type === "circle") {
-        this.drawCircle(shape.startX, shape.startY, shape.endX, shape.endY);
-      }
-      if (shape.type === "freePencil") {
-        shape.currX.map((_, i) => {
-          this.drawFreePencil(
-            shape.lastX[i],
-            shape.lastY[i],
-            shape.currX[i],
-            shape.currY[i]
-          );
-        });
-      }
-      if (shape.type === "line") {
-        if (shape.bendX !== undefined && shape.bendY !== undefined) {
-          this.drawBendedLine(
-            shape.type,
-            shape.startX,
-            shape.startY,
-            shape.endX,
-            shape.endY,
-            shape.bendX,
-            shape.bendY
-          );
-        } else {
-          this.drawLine(shape.startX, shape.startY, shape.endX, shape.endY);
-        }
-      }
-      if (shape.type === "diamond") {
-        this.drawDiamond(shape.startX, shape.startY, shape.endX, shape.endY);
-      }
-      if (shape.type === "arrow") {
-        if (shape.bendX !== undefined && shape.bendY !== undefined) {
-          this.drawBendedLine(
-            shape.type,
-            shape.fromX,
-            shape.fromY,
-            shape.toX,
-            shape.toY,
-            shape.bendX,
-            shape.bendY
-          );
-        } else {
-          this.drawArrow(shape.fromX, shape.fromY, shape.toX, shape.toY);
-        }
-      }
-      if (shape.type === "text") {
-        this.writeText(shape.text, shape.x, shape.y, false, shape.fontSize);
-      }
+      this.canvasDraw(shape);
     });
+    if (this.currDrawing !== null) {
+      this.canvasDraw(this.currDrawing);
+    }
     if (this.selectedShape === "selection" && this.activeShape) {
       this.drawSelectionBox(this.activeShape);
     }
@@ -228,13 +230,35 @@ export class Draw {
 
   setTool = (shape: ShapeTypes) => {
     this.selectedShape = shape;
+
+    if (this.onShapeChange) {
+      this.onShapeChange(shape);
+    }
     if (shape !== "text" && this.text.length > 0) {
+      const shapeId = uuidv4();
       this.shapes.push({
         type: "text",
+        shapeId,
         text: this.text,
         x: this.startX,
         y: this.startY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "text",
+              shapeId,
+              text: this.text,
+              x: this.startX,
+              y: this.startY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
       this.cursor = false;
       this.text = "";
       this.isWriting = false;
@@ -282,7 +306,12 @@ export class Draw {
           type: "chat",
           isDrawing: true,
           payload: {
-            message: JSON.stringify(this.text),
+            message: JSON.stringify({
+              type: "text",
+              text: this.text,
+              x: this.startX,
+              y: this.startY,
+            }),
             roomId: this.roomId,
           },
         })
@@ -293,16 +322,37 @@ export class Draw {
   mouseClickHandler = (e: MouseEvent) => {
     if (this.selectedShape === "text") {
       if (this.isWriting) {
+        const shapeId = uuidv4();
         this.shapes.push({
           type: "text",
+          shapeId,
           text: this.text,
           x: this.startX,
           y: this.startY,
         });
+        this.socket.send(
+          JSON.stringify({
+            type: "chat",
+            isDrawing: false,
+            payload: {
+              message: JSON.stringify({
+                type: "text",
+                shapeId,
+                text: this.text,
+                x: this.startX,
+                y: this.startY,
+              }),
+              roomId: this.roomId,
+            },
+          })
+        );
         this.isWriting = false;
         this.cursor = false;
         this.text = "";
         this.selectedShape = "selection";
+        if (this.onShapeChange) {
+          this.onShapeChange("selection");
+        }
         this.clearCanvas();
       } else if (this.isWriting === false) {
         window.clearInterval(this.blinkInterval);
@@ -353,6 +403,16 @@ export class Draw {
       if (erasable) {
         const index = this.shapes.indexOf(erasable);
         this.shapes.splice(index, 1);
+        this.socket.send(
+          JSON.stringify({
+            type: "chat",
+            payload: {
+              message: JSON.stringify(erasable),
+              roomId: this.roomId,
+              type: "erase",
+            },
+          })
+        );
         this.clearCanvas();
         // console.log(index);
         // this.shapes = this.shapes.filter((shape) => shape !== erasable);
@@ -456,6 +516,23 @@ export class Draw {
         lastX: [X],
         lastY: [Y],
       };
+
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "freePencil",
+              currX: [X],
+              currY: [Y],
+              lastX: [X],
+              lastY: [Y],
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
   };
 
@@ -483,17 +560,53 @@ export class Draw {
           const dx = worldX - ref.x - this.dragOffsetX;
           const dy = worldY - ref.y - this.dragOffsetY;
           this.updateShapePosition(this.activeShape, dx, dy);
+          this.socket.send(
+            JSON.stringify({
+              type: "chat",
+              isDrawing: false,
+              isUpdating: true,
+              payload: {
+                message: JSON.stringify(this.activeShape),
+                roomId: this.roomId,
+                type: "update",
+              },
+            })
+          );
         } else {
           const bbox = this.getBoundingBox(this.activeShape);
           const dx = worldX - bbox.x - this.dragOffsetX;
           const dy = worldY - bbox.y - this.dragOffsetY;
           this.updateShapePosition(this.activeShape, dx, dy);
+          this.socket.send(
+            JSON.stringify({
+              type: "chat",
+              isDrawing: false,
+              isUpdating: true,
+              payload: {
+                message: JSON.stringify(this.activeShape),
+                roomId: this.roomId,
+                type: "update",
+              },
+            })
+          );
         }
         this.clearCanvas();
         return;
       }
       if (this.isResizing && this.activeShape && this.resizingHandle) {
         this.resizeShape(this.activeShape, this.resizingHandle, worldX, worldY);
+        this.socket.send(
+          JSON.stringify({
+            type: "chat",
+            isDrawing: false,
+            isUpdating: true,
+            payload: {
+              message: JSON.stringify(this.activeShape),
+              roomId: this.roomId,
+              type: "update",
+            },
+          })
+        );
         this.clearCanvas();
         return;
       }
@@ -507,9 +620,41 @@ export class Draw {
       const width = worldX - this.startX;
       const height = worldY - this.startY;
       this.drawRect(this.startX, this.startY, width, height);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "rect",
+              width,
+              height,
+              x: this.startX,
+              y: this.startY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
     if (this.selectedShape === "circle") {
       this.drawCircle(this.startX, this.startY, worldX, worldY);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "circle",
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
     if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
@@ -532,16 +677,80 @@ export class Draw {
 
       this.startX = worldX;
       this.startY = worldY;
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "freePencil",
+              currX: this.currFreePencil.currX,
+              currY: this.currFreePencil.currY,
+              lastX: this.currFreePencil.lastX,
+              lastY: this.currFreePencil.lastY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
 
     if (this.selectedShape === "line") {
       this.drawLine(this.startX, this.startY, worldX, worldY);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "line",
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
     if (this.selectedShape === "diamond") {
       this.drawDiamond(this.startX, this.startY, worldX, worldY);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "diamond",
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
     if (this.selectedShape === "arrow") {
       this.drawArrow(this.startX, this.startY, worldX, worldY);
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: true,
+          payload: {
+            message: JSON.stringify({
+              type: "arrow",
+              fromX: this.startX,
+              fromY: this.startY,
+              toX: worldX,
+              toY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
   };
 
@@ -551,6 +760,20 @@ export class Draw {
       return;
     }
     if (this.selectedShape === "selection") {
+      if (this.activeShape) {
+        this.socket.send(
+          JSON.stringify({
+            type: "chat",
+            isDrawing: false,
+            isUpdating: false,
+            payload: {
+              message: JSON.stringify(this.activeShape),
+              roomId: this.roomId,
+              type: "update",
+            },
+          })
+        );
+      }
       this.isDragging = false;
       this.isResizing = false;
       this.resizingHandle = null;
@@ -562,50 +785,169 @@ export class Draw {
     if (this.selectedShape === "rect") {
       const width = worldX - this.startX;
       const height = worldY - this.startY;
+      const shapeId = uuidv4();
       this.shapes.push({
         type: this.selectedShape,
+        shapeId,
         width,
         height,
         x: this.startX,
         y: this.startY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "rect",
+              shapeId,
+              width,
+              height,
+              x: this.startX,
+              y: this.startY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     } else if (this.selectedShape === "circle") {
+      const shapeId = uuidv4();
       this.shapes.push({
         type: "circle",
+        shapeId,
         startX: this.startX,
         startY: this.startY,
         endX: worldX,
         endY: worldY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "circle",
+              shapeId,
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     } else if (this.selectedShape === "freePencil") {
       if (!this.currFreePencil) return;
-
-      this.shapes.push(this.currFreePencil);
+      const shapeId = uuidv4();
+      this.shapes.push({
+        type: "freePencil",
+        shapeId,
+        currX: this.currFreePencil.currX,
+        currY: this.currFreePencil.currY,
+        lastX: this.currFreePencil.lastX,
+        lastY: this.currFreePencil.lastY,
+      });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "freePencil",
+              shapeId,
+              currX: this.currFreePencil.currX,
+              currY: this.currFreePencil.currY,
+              lastX: this.currFreePencil.lastX,
+              lastY: this.currFreePencil.lastY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
       this.currFreePencil = null;
     } else if (this.selectedShape === "line") {
+      const shapeId = uuidv4();
       this.shapes.push({
         type: "line",
+        shapeId,
         startX: this.startX,
         startY: this.startY,
         endX: worldX,
         endY: worldY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "line",
+              shapeId,
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     } else if (this.selectedShape === "diamond") {
+      const shapeId = uuidv4();
       this.shapes.push({
         type: "diamond",
+        shapeId,
         startX: this.startX,
         startY: this.startY,
         endX: worldX,
         endY: worldY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "diamond",
+              shapeId,
+              startX: this.startX,
+              startY: this.startY,
+              endX: worldX,
+              endY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     } else if (this.selectedShape === "arrow") {
+      const shapeId = uuidv4();
       this.shapes.push({
         type: "arrow",
+        shapeId,
         fromX: this.startX,
         fromY: this.startY,
         toX: worldX,
         toY: worldY,
       });
+      this.socket.send(
+        JSON.stringify({
+          type: "chat",
+          isDrawing: false,
+          payload: {
+            message: JSON.stringify({
+              type: "arrow",
+              shapeId,
+              fromX: this.startX,
+              fromY: this.startY,
+              toX: worldX,
+              toY: worldY,
+            }),
+            roomId: this.roomId,
+          },
+        })
+      );
     }
   };
 
@@ -1173,6 +1515,61 @@ export class Draw {
     }
   }
 
+  canvasDraw(shape: Shape) {
+    if (shape.type === "rect") {
+      this.drawRect(shape.x, shape.y, shape.width, shape.height);
+    }
+    if (shape.type === "circle") {
+      this.drawCircle(shape.startX, shape.startY, shape.endX, shape.endY);
+    }
+    if (shape.type === "freePencil") {
+      shape.currX.map((_, i) => {
+        this.drawFreePencil(
+          shape.lastX[i],
+          shape.lastY[i],
+          shape.currX[i],
+          shape.currY[i]
+        );
+      });
+    }
+    if (shape.type === "line") {
+      if (shape.bendX !== undefined && shape.bendY !== undefined) {
+        this.drawBendedLine(
+          shape.type,
+          shape.startX,
+          shape.startY,
+          shape.endX,
+          shape.endY,
+          shape.bendX,
+          shape.bendY
+        );
+      } else {
+        this.drawLine(shape.startX, shape.startY, shape.endX, shape.endY);
+      }
+    }
+    if (shape.type === "diamond") {
+      this.drawDiamond(shape.startX, shape.startY, shape.endX, shape.endY);
+    }
+    if (shape.type === "arrow") {
+      if (shape.bendX !== undefined && shape.bendY !== undefined) {
+        this.drawBendedLine(
+          shape.type,
+          shape.fromX,
+          shape.fromY,
+          shape.toX,
+          shape.toY,
+          shape.bendX,
+          shape.bendY
+        );
+      } else {
+        this.drawArrow(shape.fromX, shape.fromY, shape.toX, shape.toY);
+      }
+    }
+    if (shape.type === "text") {
+      this.writeText(shape.text, shape.x, shape.y, false, shape.fontSize);
+    }
+  }
+
   drawBendedLine(
     type: "arrow" | "line",
     startX: number,
@@ -1318,6 +1715,8 @@ export class Draw {
   };
 
   initDraw = () => {
+    window.addEventListener("resize", this.resizeCanvas);
+
     this.canvas.addEventListener("mousedown", this.mouseDownHandler);
 
     this.canvas.addEventListener("mousemove", this.mouseMoveHandler);
@@ -1332,6 +1731,7 @@ export class Draw {
   };
 
   eventRemover = () => {
+    window.removeEventListener("resize", this.resizeCanvas);
     this.canvas.removeEventListener("mousedown", this.mouseDownHandler);
     this.canvas.removeEventListener("mousemove", this.mouseMoveHandler);
     this.canvas.removeEventListener("mouseup", this.mouseUpHandler);

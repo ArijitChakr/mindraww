@@ -19,7 +19,7 @@ export default function SigninPage() {
     });
     setLoading(false);
     localStorage.setItem("token", response.data.token);
-    router.push("/");
+    router.push("/dashboard");
   };
 
   return (

@@ -107,6 +107,22 @@ app.post("/create-room", authMiddleware, async (req, res) => {
   }
 });
 
+app.get("/rooms", authMiddleware, async (req, res) => {
+  const userId = req.userId;
+
+  try {
+    const rooms = await prisma.room.findMany({
+      where: {
+        userId,
+      },
+    });
+
+    res.json(rooms);
+  } catch (e) {
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 app.get("/chats/:roomId", async (req, res) => {
   const roomId = req.params.roomId;
 
@@ -118,9 +134,7 @@ app.get("/chats/:roomId", async (req, res) => {
     });
     res.json(chats);
   } catch (e) {
-    res.json({
-      chats: [],
-    });
+    res.json([]);
   }
 });
 

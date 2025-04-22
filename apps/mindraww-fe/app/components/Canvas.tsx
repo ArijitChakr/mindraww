@@ -21,7 +21,9 @@ export default function Canvas({
 
   useEffect(() => {
     if (canvasRef.current) {
-      const draw = new Draw(canvasRef.current, socket, roomId);
+      const draw = new Draw(canvasRef.current, socket, roomId, (newShape) => {
+        setSelectedShape(newShape);
+      });
       setGame(draw);
       return () => {
         draw.eventRemover();
